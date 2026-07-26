@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Алтын Адам - Интерактивті Жоба</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #050a15; 
+            color: #f8fafc;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+        }
+        
+        h1, h2, h3 { font-family: 'Playfair Display', serif; }
+
+        #canvas-container {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100vh;
+            z-index: 1; transition: opacity 0.5s ease;
+        }
+
+        .tabs-container {
+            position: absolute;
+            top: 25px; left: 50%; transform: translateX(-50%);
+            z-index: 20; display: flex; gap: 10px;
+            background: rgba(15, 23, 42, 0.7);
+            padding: 6px; border-radius: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(234, 179, 8, 0.3);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+
+        .tab-btn {
+            padding: 10px 28px; border-radius: 25px;
+            font-weight: 600; transition: all 0.3s ease; color: #94a3b8;
+            cursor: pointer; border: none; outline: none; background: transparent;
+        }
+
+        .tab-btn.active {
+            background-color: #eab308; color: #0f172a;
+            box-shadow: 0 0 15px rgba(234, 179, 8, 0.5);
+        }
+
+        .tab-btn:hover:not(.active) { color: #f8fafc; background: rgba(255, 255, 255, 0.1); }
+
+        /* Тест көрінісі */
+        #quiz-view {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100vh;
+            z-index: 15; background-color: #0b1120;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            padding: 20px; padding-top: 80px; overflow-y: auto;
+        }
+
+        .quiz-panel {
+            background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(15px);
+            border: 1px solid rgba(234, 179, 8, 0.3);
+            box-shadow: 0 10px 50px rgba(0, 0, 0, 0.7);
+            max-width: 800px; width: 100%; border-radius: 20px; padding: 2.5rem;
+        }
+
+        .option-btn { transition: all 0.2s ease; transform: scale(1); }
+        .option-btn:hover:not(:disabled) {
+            background-color: rgba(234, 179, 8, 0.15); border-color: #eab308; transform: scale(1.01);
+        }
+        .option-btn.correct { background-color: rgba(34, 197, 94, 0.9); color: white; border-color: #22c55e; }
+        .option-btn.incorrect { background-color: rgba(239, 68, 68, 0.9); color: white; border-color: #ef4444; }
+
+        .gold-text {
+            background: linear-gradient(to right, #eab308, #fef08a, #ca8a04);
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+        }
+        
+        .loading-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #050a15; display: flex; justify-content: center; align-items: center;
+            z-index: 9999; transition: opacity 0.8s ease;
+        }
+
+        @media (min-width: 1024px) {
+            body { display: flex; flex-direction: row; }
+            .tabs-container { display: none !important; }
+            #canvas-container { 
+                position: relative; width: 55vw; height: 100vh; 
+                opacity: 1 !important; pointer-events: auto !important;
+            }
+            #quiz-view { 
+                position: relative; width: 45vw; height: 100vh; 
+                display: flex !important; opacity: 1 !important; pointer-events: auto !important;
+                padding-top: 20px; 
+                background-color: transparent;
+                border-left: 1px solid rgba(234, 179, 8, 0.2);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading" class="loading-screen">
+        <div class="text-center">
+            <h2 class="text-4xl gold-text mb-6">Алтын Адам</h2>
+            <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-yellow-500 mx-auto"></div>
+            <p class="mt-4 text-gray-400 text-sm">3D кеңістік дайындалуда...</p>
+        </div>
+    </div>
+
+    <div class="tabs-container">
+        <button id="tab-3d" class="tab-btn active">3D Көрме</button>
+        <button id="tab-quiz" class="tab-btn">Тест тапсыру</button>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div id="quiz-view">
+        <div class="quiz-panel flex flex-col">
+            <div id="quiz-header" class="mb-8 text-center border-b border-gray-700/50 pb-6">
+                <h2 class="text-3xl font-bold gold-text mb-4">Біліміңізді тексеріңіз</h2>
+                <div class="flex justify-between items-center text-sm px-4">
+                    <span class="text-gray-400 font-medium bg-slate-800/80 px-4 py-2 rounded-full border border-gray-700">Сұрақ: <span id="current-question-num" class="text-yellow-500 font-bold text-base">1</span> / 15</span>
+                    <span class="text-gray-400 font-medium bg-slate-800/80 px-4 py-2 rounded-full border border-gray-700">Ұпай: <span id="score" class="text-green-400 font-bold text-base">0</span></span>
+                </div>
+                <div class="w-full bg-gray-800 rounded-full h-1.5 mt-6 overflow-hidden">
+                    <div id="progress-bar" class="bg-gradient-to-r from-yellow-600 to-yellow-400 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div id="question-container" class="flex-grow flex flex-col w-full">
+                <p id="question-text" class="text-xl md:text-2xl font-semibold mb-8 text-white text-center leading-relaxed"></p>
+                <div id="options-container" class="space-y-4 w-full"></div>
+            </div>
+
+            <div id="result-container" class="hidden flex-grow flex-col justify-center items-center text-center py-8">
+                <h3 class="text-4xl font-bold gold-text mb-6">Тест аяқталды!</h3>
+                <p class="text-xl text-gray-300 mb-6">Сіздің нәтижеңіз:</p>
+                <div class="text-6xl font-bold text-white mb-8 bg-slate-800 p-8 rounded-full border-4 border-yellow-500 w-40 h-40 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.4)]">
+                    <span id="final-score">0</span>
+                </div>
+                <p id="result-message" class="text-xl mb-10 text-gray-300 max-w-md"></p>
+                <button id="restart-btn" class="bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-4 px-12 rounded-full transition-colors text-lg shadow-lg">Қайта бастау</button>
+            </div>
+
+            <div id="controls" class="mt-8 pt-6 border-t border-gray-700/50 flex justify-end">
+                <button id="next-btn" class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-3 px-8 rounded-xl transition-all hidden shadow-md">Келесі сұрақ &rarr;</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tab3d = document.getElementById('tab-3d');
+        const tabQuiz = document.getElementById('tab-quiz');
+        const view3d = document.getElementById('canvas-container');
+        const viewQuiz = document.getElementById('quiz-view');
+
+        tab3d.addEventListener('click', () => {
+            tab3d.classList.add('active'); tabQuiz.classList.remove('active');
+            view3d.style.opacity = '1'; view3d.style.pointerEvents = 'auto';
+            viewQuiz.style.display = 'none';
+        });
+
+        tabQuiz.addEventListener('click', () => {
+            tabQuiz.classList.add('active'); tab3d.classList.remove('active');
+            view3d.style.opacity = '0'; view3d.style.pointerEvents = 'none';
+            viewQuiz.style.display = 'flex';
+        });
+
+        const facts = [
+            "1969 жылы табылған Алтын адам — сақ мәдениетінің ең жарқын ескерткіші.",
+            "Қорған б.з.д. V-IV ғасырларға жатады, жерленген адам 17-18 жастағы сақ ханзадасы.",
+            "Киімінде төрт мыңнан астам алтын әшекейлер 'аң стилінде' жасалған.",
+            "Құрылымы өте күрделі: биік шошақ бөрік, қысқа қызыл шекпен және шалбар.",
+            "Ең басты құпия — қорғаннан табылған күміс тостағандағы 26 руна тәріздес таңба.",
+            "Баскиіміндегі алтын жебелер мен таутекелер күн культімен байланысты.",
+            "Табылған қылыш пен қанжар оның нағыз жауынгер болғанын дәлелдейді.",
+            "Әшекейлердің орналасуы бүкіл ғаламның үлгісін, 3 әлемді бейнелейді.",
+            "Есік қорғаны Тянь-Шань бөктерінде, Алматыдан 50 шақырым жерде орналасқан.",
+            "Алтын адам ежелгі сақтардың жоғары дамыған мәдениеті болғанын паш етті.",
+            "Кей ғалымдар оның сақ ханшайымы немесе абыз әйел болуы мүмкін екенін айтады.",
+            "Бұл археологиялық жаңалық Тәуелсіз Қазақстанның басты символына айналды.",
+            "Қабірден табылған қола айна сақтардың наным-сенімдерінен хабар береді.",
+            "Алтын адамның бойы шамамен 165 сантиметр болған.",
+            "Түпнұсқасы мен реконструкциясы Астанадағы ҚР Ұлттық музейінде сақтаулы."
+        ];
+
+        const quizData = [
+            { question: "Алтын адамды 1969 жылы тапқан танымал археолог кім?", options: ["Әлкей Марғұлан", "Кемел Ақышев", "Қаныш Сәтбаев", "Оразақ Смағұлов"], correct: 1 },
+            { question: "Алтын адам табылған Есік қорғаны қай ғасырларға жатады?", options: ["Б.з.д. I-II ғғ.", "Б.з.д. VIII-VII ғғ.", "Б.з.д. V-IV ғғ.", "Б.з. I-II ғғ."], correct: 2 },
+            { question: "Алтын адамның киіміндегі алтын әшекейлер саны шамамен қанша?", options: ["Екі мыңнан астам", "Үш мыңнан астам", "Төрт мыңнан астам", "Бес мыңнан астам"], correct: 2 },
+            { question: "Есік қорғанынан табылған ең жұмбақ заттардың бірі?", options: ["Алтын таяқша", "Күміс тостаған", "Қола айна", "Қыш құмыра"], correct: 1 },
+            { question: "Алтын адамның баскиіміндегі бейнелер қандай культпен байланысты?", options: ["От культі", "Ай культі", "Су культі", "Күн культі"], correct: 3 },
+            { question: "Алтын адам қайтыс болған кезде неше жаста болған?", options: ["14-15 жас", "17-18 жас", "25-30 жас", "40-45 жас"], correct: 1 },
+            { question: "Алтын адамның жауынгер болғанын дәлелдейтін қару?", options: ["Садақ пен жебе", "Сүңгі", "Айбалта", "Қылыш пен қанжар"], correct: 3 },
+            { question: "Киімдегі әшекейлердің орналасуы нені бейнелейді?", options: ["Әскери шендерді", "Бүкіл ғаламның үлгісін (3 әлем)", "Сақ тайпаларының санын", "Жыл мезгілдерін"], correct: 1 },
+            { question: "Есік қорғаны қай қаланың маңында орналасқан?", options: ["Астана", "Шымкент", "Алматы", "Тараз"], correct: 2 },
+            { question: "Алтын адамның әшекейлері қандай стильде жасалған?", options: ["Полихромдық", "Аң стилі", "Геометриялық", "Өсімдік"], correct: 1 },
+            { question: "Бұл жаңалық сақтар туралы нені дәлелдеді?", options: ["Тек көшпелі болғанын", "Егіншілікпен айналысқанын", "Мемлекеттілігі мен жазуы болғанын", "Темір өңдеуді білмегенін"], correct: 2 },
+            { question: "Алтын адамның кім болуы мүмкін деген балама гипотеза?", options: ["Қытай елшісі", "Сақ ханшайымы/абыз әйел", "Парсы патшасы", "Қарапайым құл"], correct: 1 },
+            { question: "Тәуелсіздік монументіндегі бейнесі қай қалада орнатылған?", options: ["Астана", "Түркістан", "Шымкент", "Алматы"], correct: 3 },
+            { question: "Алтын адамның бойы шамамен қанша болған?", options: ["155 см", "165 см", "175 см", "185 см"], correct: 1 },
+            { question: "Алтын адамның түпнұсқасы қазір қайда сақтаулы?", options: ["Эрмитажда", "Луврда", "ҚР Ұлттық музейінде", "Орталық музейде"], correct: 2 }
+        ];
+
+        let currentQuestion = 0; let score = 0; let hasAnswered = false;
+        
+        function loadQuestion() {
+            hasAnswered = false;
+            document.getElementById('next-btn').classList.add('hidden');
+            const q = quizData[currentQuestion];
+            document.getElementById('question-text').textContent = q.question;
+            document.getElementById('current-question-num').textContent = currentQuestion + 1;
+            document.getElementById('progress-bar').style.width = `${(currentQuestion / quizData.length) * 100}%`;
+            
+            const optionsContainer = document.getElementById('options-container');
+            optionsContainer.innerHTML = '';
+            q.options.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'option-btn w-full text-left bg-slate-800/80 border border-slate-600 text-gray-200 py-4 px-6 rounded-xl text-lg shadow-sm';
+                btn.textContent = opt;
+                btn.onclick = () => selectOption(idx, btn);
+                optionsContainer.appendChild(btn);
+            });
+        }
+
+        function selectOption(idx, btn) {
+            if (hasAnswered) return;
+            hasAnswered = true;
+            const q = quizData[currentQuestion];
+            const buttons = document.getElementById('options-container').querySelectorAll('.option-btn');
+            
+            if (idx === q.correct) {
+                btn.classList.add('correct'); score++;
+                document.getElementById('score').textContent = score;
+            } else {
+                btn.classList.add('incorrect');
+                buttons[q.correct].classList.add('correct');
+            }
+            
+            buttons.forEach(b => {
+                b.disabled = true;
+                if (!b.classList.contains('correct') && !b.classList.contains('incorrect')) b.style.opacity = '0.5';
+            });
+            document.getElementById('next-btn').classList.remove('hidden');
+        }
+
+        document.getElementById('next-btn').addEventListener('click', () => {
+            currentQuestion++;
+            if (currentQuestion < quizData.length) loadQuestion();
+            else showResults();
+        });
+
+        function showResults() {
+            document.getElementById('quiz-header').classList.add('hidden');
+            document.getElementById('question-container').classList.add('hidden');
+            document.getElementById('next-btn').classList.add('hidden');
+            
+            const rc = document.getElementById('result-container');
+            rc.classList.remove('hidden'); rc.style.display = 'flex';
+            document.getElementById('final-score').textContent = score;
+            
+            let msg = "";
+            if (score === 15) msg = "Керемет! Сіз нағыз тарихшысыз!";
+            else if (score >= 10) msg = "Жақсы нәтиже! Сіз Алтын адам туралы көп білесіз.";
+            else msg = "3D көрмедегі мәліметтерді қайта оқып, бағыңызды сынап көріңіз.";
+            document.getElementById('result-message').textContent = msg;
+        }
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            currentQuestion = 0; score = 0; document.getElementById('score').textContent = 0;
+            document.getElementById('quiz-header').classList.remove('hidden');
+            document.getElementById('question-container').classList.remove('hidden');
+            document.getElementById('result-container').classList.add('hidden');
+            document.getElementById('result-container').style.display = 'none';
+            loadQuestion();
+        });
+
+        // ---------------- 3D КЕҢІСТІК ----------------
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050a15);
+        scene.fog = new THREE.FogExp2(0x050a15, 0.012);
+        
+        const getWidth = () => container.clientWidth || window.innerWidth;
+        const getHeight = () => container.clientHeight || window.innerHeight;
+
+        const camera = new THREE.PerspectiveCamera(40, getWidth() / getHeight(), 0.1, 1000);
+        camera.position.set(0, 5, 85); 
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(getWidth(), getHeight());
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        let imageMesh;
+        const R = 27; // Сақина радиусы
+
+        // 1. ОРТАДАҒЫ СУРЕТТІ ЖАСАУ
+        function createAltynAdamMesh(texture, w, h) {
+            const aspect = w / h;
+            const imgH = R * 2.3; 
+            const imgW = imgH * aspect;
+            
+            const geometry = new THREE.PlaneGeometry(imgW, imgH);
+            
+            const material = new THREE.MeshBasicMaterial({ 
+                map: texture,
+                transparent: true, 
+                alphaTest: 0.2, // Мөлдірлікті кесу шегі (тереңдік дұрыс жұмыс істеуі үшін)
+                depthWrite: true, // Тереңдік буферіне жазу 
+                side: THREE.DoubleSide
+            });
+            
+            imageMesh = new THREE.Mesh(geometry, material);
+            imageMesh.position.set(0, -3, 0); 
+            imageMesh.renderOrder = 1; // МАҢЫЗДЫ: Алтын адам бірінші салынады
+            scene.add(imageMesh);
+            hideLoading();
+        }
+
+        function loadAndRemoveBackground(imgUrl) {
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width; canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                
+                try {
+                    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imgData.data;
+                    for (let i = 0; i < data.length; i += 4) {
+                        let r = data[i], g = data[i+1], b = data[i+2];
+                        
+                        if (r >= 240 && g >= 240 && b >= 240) {
+                            data[i+3] = 0; 
+                        }
+                    }
+                    ctx.putImageData(imgData, 0, 0);
+                    const texture = new THREE.CanvasTexture(canvas);
+                    texture.minFilter = THREE.LinearFilter;
+                    createAltynAdamMesh(texture, img.width, img.height);
+                } catch (e) {
+                    const tex = new THREE.Texture(img);
+                    createAltynAdamMesh(tex, img.width, img.height);
+                }
+            };
+            img.onerror = () => {
+                loadAndRemoveBackground("https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Golden_Man.jpg/400px-Golden_Man.jpg");
+            }
+            img.src = imgUrl;
+        }
+
+        const proxyUrl = "https://wsrv.nl/?url=" + encodeURIComponent("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRmDoghUXR44Q8r0sFKFGULQ9BBdDJbnShdLNOqYAH0CdqhRdMyr11FtX4&s=10");
+        loadAndRemoveBackground(proxyUrl);
+
+
+        // 2. ЖАҢА ЖҮЙЕ: МІНСІЗ ҮЗІЛМЕЙТІН ШЕҢБЕР (0% Overlap)
+        const CW = 3500; // Canvas ұзындығы 
+        const CH = 120;  // Canvas биіктігі
+        
+        const ringCanvas = document.createElement('canvas');
+        ringCanvas.width = CW; 
+        ringCanvas.height = CH;
+        const ringCtx = ringCanvas.getContext('2d');
+
+        const ringTexture = new THREE.CanvasTexture(ringCanvas);
+        ringTexture.minFilter = THREE.LinearFilter;
+        ringTexture.generateMipmaps = false;
+
+        const ringMaterial = new THREE.MeshBasicMaterial({
+            map: ringTexture,
+            transparent: true,
+            opacity: 1, 
+            depthWrite: false, // Өзін-өзі жаппас үшін
+            depthTest: true, // Алтын адамның артындағы бөлігі жасырынуы үшін (ішінде тұрғандай әсер)
+            side: THREE.DoubleSide
+        });
+
+        // Цилиндр биіктігі
+        const ringGeometry = new THREE.CylinderGeometry(R, R, 9, 64, 1, true);
+        const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
+        
+        // Сақинаның басталу нүктесін дәл алдына қою және қиғаштау
+        ringMesh.rotation.y = Math.PI / 2; 
+        ringMesh.rotation.x = 0.25; // Алдыңғы жағын төмен түсіру (қиғаштау)
+        ringMesh.position.y = -6.5; // Белден төмен орналастыру
+        ringMesh.renderOrder = 2; // МАҢЫЗДЫ: Шеңбер екінші салынады
+        
+        scene.add(ringMesh);
+
+        // Мәтінді жүргізу логикасы
+        let currentFactIndex = 0;
+        let offsetX = 0; 
+        const scrollSpeed = 1.8;
+
+        function updateTicker() {
+            ringCtx.clearRect(0, 0, CW, CH);
+            
+            ringCtx.font = 'bold 36px "Montserrat", sans-serif';
+            ringCtx.textBaseline = 'middle';
+            
+            let x = offsetX;
+            let i = currentFactIndex;
+            const y = CH / 2;
+            
+            while (x < CW) {
+                const text = facts[i % facts.length] + "        ✦        ";
+                const textWidth = ringCtx.measureText(text).width;
+                
+                // Көлеңке
+                ringCtx.fillStyle = 'rgba(234, 179, 8, 0.4)';
+                ringCtx.fillText(text, x + 2, y + 2);
+                
+                // Негізгі алтын мәтін
+                ringCtx.fillStyle = '#facc15';
+                ringCtx.fillText(text, x, y);
+                
+                // Тігісті жалғау (Seam Fix)
+                if (x + textWidth > CW) {
+                    ringCtx.fillStyle = 'rgba(234, 179, 8, 0.4)';
+                    ringCtx.fillText(text, x - CW + 2, y + 2);
+                    ringCtx.fillStyle = '#facc15';
+                    ringCtx.fillText(text, x - CW, y);
+                }
+                
+                x += textWidth;
+                i++;
+            }
+            
+            offsetX -= scrollSpeed;
+            
+            const firstText = facts[currentFactIndex % facts.length] + "        ✦        ";
+            const firstWidth = ringCtx.measureText(firstText).width;
+            
+            if (offsetX <= -firstWidth) {
+                offsetX += firstWidth;
+                currentFactIndex = (currentFactIndex + 1) % facts.length;
+            }
+            
+            ringTexture.needsUpdate = true;
+        }
+
+        function hideLoading() {
+            const loader = document.getElementById('loading');
+            if(loader) {
+                loader.style.opacity = '0';
+                setTimeout(() => loader.style.display = 'none', 800);
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            const width = container.clientWidth || window.innerWidth;
+            const height = container.clientHeight || window.innerHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        });
+
+        // 3. АНИМАЦИЯ ЦИКЛІ
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Desktop экранында немесе 3D таб қосылып тұрғанда ғана рендер жасау
+            if(view3d.style.opacity !== '0' || window.innerWidth >= 1024) {
+                updateTicker(); 
+                
+                renderer.render(scene, camera);
+            }
+        }
+
+        window.onload = () => {
+            loadQuestion();
+            animate();
+            setTimeout(hideLoading, 5000); // Резервтік жасыру
+        };
+    </script>
+</body>
+</html>
